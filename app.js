@@ -126,6 +126,13 @@
   // ---- 初期位置:新しい回(下側)を表示 ----
   var tableScroll = scrollers[1];
   function toBottom() { tableScroll.scrollTop = tableScroll.scrollHeight; }
+
+  // 「最新回へ戻る」:縦位置だけ最下段へ。横位置(scrollLeft)には触れない
+  document.getElementById('latest-btn').addEventListener('click', function () {
+    var top = tableScroll.scrollHeight - tableScroll.clientHeight;
+    if (tableScroll.scrollTo) tableScroll.scrollTo({ top: top, behavior: 'smooth' });
+    else tableScroll.scrollTop = top;
+  });
   toBottom();
   window.addEventListener('load', toBottom);
   window.addEventListener('orientationchange', function () { setTimeout(toBottom, 300); });

@@ -154,7 +154,7 @@ body { position: fixed; inset: 0; width: 100%; }
   font-variant-numeric: tabular-nums;
 }
 
-#clear-btn {
+#clear-btn, #latest-btn {
   position: relative;
   flex: none;
   height: 22px;
@@ -167,7 +167,7 @@ body { position: fixed; inset: 0; width: 100%; }
   border-radius: 5px;
 }
 /* 見た目は小さく、タップ範囲だけ広げる */
-#clear-btn::after { content: ""; position: absolute; inset: -8px -6px; }
-#clear-btn:active:not(:disabled) { background: var(--line); }
+#clear-btn::after, #latest-btn::after { content: ""; position: absolute; inset: -8px -6px; }
+#clear-btn:active:not(:disabled), #latest-btn:active { background: var(--line); }
 #clear-btn:disabled { opacity: .4; }
 @media (prefers-reduced-motion: reduce) { #count.bump { animation: none; } }
