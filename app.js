@@ -50,7 +50,13 @@
   });
 
   var predRow = document.getElementById('pred-row');
-  buildRow(predRow, '次回予想', function (c) { return el(colClass(c)); });
+  buildRow(predRow, '次回予想', function (c) {
+    var d = el(colClass(c));
+    d.dataset.n = c;
+    d.setAttribute('role', 'button');
+    d.setAttribute('aria-pressed', 'false');
+    return d;
+  });
 
   // ---- 横スクロールの同期(見出し・出目表・予想欄) ----
   var scrollers = [
@@ -69,6 +75,48 @@
       timer = setTimeout(function () { owner = null; }, 120);
     }, { passive: true });
   });
+
+  // ---- 数字選択(第2段階) ----
+  var MAX_SELECT = 7;
+  var selected = {};          // { 数字: true }
+  var countEl = document.getElementById('count');
+  var clearBtn = document.getElementById('clear-btn');
+
+  function selectedCount() { return Object.keys(selected).length; }
+
+  function render() {
+    var n = selectedCount();
+    countEl.textContent = n + ' / ' + MAX_SELECT;
+    countEl.classList.toggle('full', n === MAX_SELECT);
+    clearBtn.disabled = n === 0;
+    Array.prototype.forEach.call(predRow.querySelectorAll('.cell[data-n]'), function (cell) {
+      var on = !!selected[cell.dataset.n];
+      cell.classList.toggle('sel', on);
+      cell.setAttribute('aria-pressed', on ? 'true' : 'false');
+      cell.textContent = on ? cell.dataset.n : '';
+    });
+  }
+
+  predRow.addEventListener('click', function (e) {
+    var cell = e.target.closest('.cell[data-n]');
+    if (!cell) return;
+    var n = cell.dataset.n;
+    if (selected[n]) {
+      delete selected[n];
+    } else if (selectedCount() < MAX_SELECT) {
+      selected[n] = true;
+    } else {
+      // 8個目は追加しない。選択数表示を揺らして知らせる
+      countEl.classList.remove('bump');
+      void countEl.offsetWidth;
+      countEl.classList.add('bump');
+      return;
+    }
+    render();
+  });
+
+  clearBtn.addEventListener('click', function () { selected = {}; render(); });
+  render();
 
   // ---- 初期位置:新しい回(下側)を表示 ----
   var tableScroll = scrollers[1];
