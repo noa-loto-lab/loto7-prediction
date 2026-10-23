@@ -6,7 +6,7 @@
   --head-h: 30px;
   --row-h: 34px;
   --pred-h: 48px;
-  --stat-h: 32px;
+  --stat-h: 26px;
 
   --paper: #f6f5f0;
   --paper-alt: #ebe9e1;
@@ -113,27 +113,61 @@ body { position: fixed; inset: 0; width: 100%; }
 #status-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0 8px;
+  overflow: hidden;
   background: var(--paper);
   border-bottom: 1px solid var(--line);
-  font-size: 13px;
+  font-size: 12px;
+  white-space: nowrap;
 }
-#count { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.6em; }
+#count-label { flex: none; }
+#count { flex: none; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.4em; }
 #count.full { color: var(--accent); }
 #count.bump { animation: bump .25s; }
 @keyframes bump { 30% { transform: translateX(-4px); } 60% { transform: translateX(4px); } }
+
+/* 選択した数字:小さなラベル。収まらないときは横スクロール(2行にはしない) */
+#picked {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#picked::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 #clear-btn {
-  margin-left: auto;
-  height: 26px;
-  padding: 0 14px;
+  position: relative;
+  flex: none;
+  height: 22px;
+  padding: 0 9px;
   font: inherit;
   font-weight: 700;
   color: var(--ink);
   background: var(--paper-alt);
   border: 1px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 5px;
 }
+/* 見た目は小さく、タップ範囲だけ広げる */
+#clear-btn::after { content: ""; position: absolute; inset: -8px -6px; }
 #clear-btn:active:not(:disabled) { background: var(--line); }
 #clear-btn:disabled { opacity: .4; }
 @media (prefers-reduced-motion: reduce) { #count.bump { animation: none; } }

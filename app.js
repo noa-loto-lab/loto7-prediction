@@ -81,6 +81,7 @@
   var selected = {};          // { 数字: true }
   var countEl = document.getElementById('count');
   var clearBtn = document.getElementById('clear-btn');
+  var pickedEl = document.getElementById('picked');
 
   function selectedCount() { return Object.keys(selected).length; }
 
@@ -89,6 +90,10 @@
     countEl.textContent = n + ' / ' + MAX_SELECT;
     countEl.classList.toggle('full', n === MAX_SELECT);
     clearBtn.disabled = n === 0;
+    pickedEl.textContent = '';
+    Object.keys(selected).map(Number).sort(function (a, b) { return a - b; }).forEach(function (v) {
+      pickedEl.appendChild(el('chip', v));
+    });
     Array.prototype.forEach.call(predRow.querySelectorAll('.cell[data-n]'), function (cell) {
       var on = !!selected[cell.dataset.n];
       cell.classList.toggle('sel', on);
