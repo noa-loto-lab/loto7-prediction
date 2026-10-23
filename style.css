@@ -1,0 +1,99 @@
+/* 列幅の定義はここだけ。見出し・出目表・予想欄はすべてこの変数を使う */
+:root {
+  --round-w: 76px;   /* 開催回の列 */
+  --cell-w: 44px;    /* 数字マスの列(タップしやすい幅) */
+  --cols: 37;
+  --head-h: 30px;
+  --row-h: 34px;
+  --pred-h: 48px;
+
+  --paper: #f6f5f0;
+  --paper-alt: #ebe9e1;
+  --ink: #23262b;
+  --line: #cfccc0;
+  --hit: #1f5f5b;
+  --hit-ink: #ffffff;
+  --accent: #b5502d;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;              /* ページ全体のスクロールを止める */
+  overscroll-behavior: none;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+body { position: fixed; inset: 0; width: 100%; }
+
+#app {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: var(--head-h) minmax(0, 1fr) var(--pred-h);
+  /* 横向き時のノッチ・ホームバー対策 */
+  padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+/* スクロール領域(スクロールバーは非表示) */
+.hscroll, .vscroll {
+  min-width: 0;
+  min-height: 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.hscroll::-webkit-scrollbar, .vscroll::-webkit-scrollbar { display: none; }
+.hscroll { overflow-x: auto; overflow-y: hidden; }
+.vscroll { overflow: auto; }   /* 縦は独立、横は上下の基準になる */
+
+/* 行・マス共通 */
+.row {
+  display: grid;
+  grid-template-columns: var(--round-w) repeat(var(--cols), var(--cell-w));
+  width: calc(var(--round-w) + var(--cols) * var(--cell-w));
+}
+.cell, .round {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.cell.k5 { background: var(--paper-alt); }   /* 5の倍数の列を薄く色分け */
+
+.round {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--paper);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border-right: 2px solid var(--ink);
+}
+
+/* A. 見出し */
+.row.head { height: var(--head-h); }
+.head .round, .head .cell { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; border-bottom: 2px solid var(--ink); }
+.head .round { font-size: 12px; }
+
+/* B. 出目表 */
+.row.data { height: var(--row-h); }
+.cell.hit { background: var(--hit); color: var(--hit-ink); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* C. 予想欄 */
+.row.pred { height: var(--pred-h); }
+.pred .round, .pred .cell { border-top: 3px solid var(--accent); border-bottom: 0; background: var(--paper); }
+.pred .cell.k5 { background: var(--paper-alt); }
+.pred .round { color: var(--accent); }

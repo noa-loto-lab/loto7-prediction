@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<title>ロト7予想ツール</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- A. 数字の見出し領域 -->
+  <div id="head-scroll" class="hscroll"><div id="head-row" class="row head"></div></div>
+  <!-- B. 過去の出目表領域(縦スクロール+横スクロールの親) -->
+  <div id="table-scroll" class="vscroll"><div id="table-rows"></div></div>
+  <!-- C. 次回予想欄(下部固定) -->
+  <div id="pred-scroll" class="hscroll"><div id="pred-row" class="row pred"></div></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
