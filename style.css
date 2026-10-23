@@ -6,7 +6,7 @@
   --head-h: 30px;
   --row-h: 34px;
   --pred-h: 48px;
-  --stat-h: 38px;
+  --stat-h: 32px;
 
   --paper: #f6f5f0;
   --paper-alt: #ebe9e1;
@@ -38,7 +38,7 @@ body { position: fixed; inset: 0; width: 100%; }
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-rows: var(--head-h) minmax(0, 1fr) var(--stat-h) var(--pred-h);
+  grid-template-rows: var(--stat-h) var(--head-h) minmax(0, 1fr) var(--pred-h);
   /* 横向き時のノッチ・ホームバー対策 */
   padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
@@ -116,16 +116,16 @@ body { position: fixed; inset: 0; width: 100%; }
   gap: 10px;
   padding: 0 10px;
   background: var(--paper);
-  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line);
   font-size: 13px;
 }
-#count { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.6em; }
+#count { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.6em; }
 #count.full { color: var(--accent); }
 #count.bump { animation: bump .25s; }
 @keyframes bump { 30% { transform: translateX(-4px); } 60% { transform: translateX(4px); } }
 #clear-btn {
   margin-left: auto;
-  height: 28px;
+  height: 26px;
   padding: 0 14px;
   font: inherit;
   font-weight: 700;

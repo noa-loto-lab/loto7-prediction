@@ -10,16 +10,16 @@
 </head>
 <body>
 <div id="app">
-  <!-- A. 数字の見出し領域 -->
-  <div id="head-scroll" class="hscroll"><div id="head-row" class="row head"></div></div>
-  <!-- B. 過去の出目表領域(縦スクロール+横スクロールの親) -->
-  <div id="table-scroll" class="vscroll"><div id="table-rows"></div></div>
-  <!-- 選択数と全解除(予想欄の直上、横スクロールしない) -->
+  <!-- 選択数と全解除(最上段の独立した操作エリア、横スクロールしない) -->
   <div id="status-bar">
     <span id="count-label">選択数</span>
     <span id="count" aria-live="polite">0 / 7</span>
     <button id="clear-btn" type="button" disabled>全解除</button>
   </div>
+  <!-- A. 数字の見出し領域 -->
+  <div id="head-scroll" class="hscroll"><div id="head-row" class="row head"></div></div>
+  <!-- B. 過去の出目表領域(縦スクロール+横スクロールの親) -->
+  <div id="table-scroll" class="vscroll"><div id="table-rows"></div></div>
   <!-- C. 次回予想欄(下部固定) -->
   <div id="pred-scroll" class="hscroll"><div id="pred-row" class="row pred"></div></div>
 </div>
