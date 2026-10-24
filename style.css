@@ -1,19 +1,32 @@
 /* 列幅の定義はここだけ。見出し・出目表・予想欄はすべてこの変数を使う */
 :root {
-  --round-w: 76px;   /* 開催回の列 */
-  --cell-w: 44px;    /* 数字マスの列(タップしやすい幅) */
+  /* 縮尺:--z が倍率(1 = 100%)。JSが変更する。寸法はすべて --z を掛けた実寸で決める
+     (transformではなくレイアウトを変えるので、スクロール範囲とタップ位置が実寸どおりになる) */
+  --z: 1;
+
+  /* 列幅の定義はここだけ。見出し・出目表・予想欄はすべてこの変数を使う */
+  --round-w: calc(76px * var(--z));   /* 開催回の列 */
+  --cell-w: calc(44px * var(--z));    /* 数字マスの列 */
   --cols: 37;
-  --head-h: 30px;
-  --row-h: 34px;
-  --pred-h: 48px;
-  --stat-h: 26px;
+  --head-h: calc(30px * var(--z));
+  --row-h: calc(34px * var(--z));
+  --pred-h: calc(48px * var(--z));
+  --stat-h: 32px;                     /* 操作行(縮尺の対象外) */
+
+  --fs-round: max(6px, calc(13px * var(--z)));
+  --fs-head: max(6px, calc(14px * var(--z)));
+  --fs-head-round: max(6px, calc(12px * var(--z)));
+  --fs-hit: max(6px, calc(14px * var(--z)));
+  --fs-sel: max(7px, calc(18px * var(--z)));
 
   --paper: #f6f5f0;
   --paper-alt: #ebe9e1;
   --ink: #23262b;
   --line: #cfccc0;
-  --hit: #1f5f5b;
-  --hit-ink: #ffffff;
+  --main: #d3202c;    /* 本数字:赤 */
+  --bonus: #1f5fd1;   /* ボーナス数字:青 */
+  --sel: #f5b700;     /* 選択中:黄(赤・青と混同しない) */
+  --sel-ink: #1b1b1b;
   --accent: #b5502d;
 }
 
@@ -78,7 +91,7 @@ body { position: fixed; inset: 0; width: 100%; }
   left: 0;
   z-index: 2;
   background: var(--paper);
-  font-size: 13px;
+  font-size: var(--fs-round);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   border-right: 2px solid var(--ink);
@@ -86,12 +99,14 @@ body { position: fixed; inset: 0; width: 100%; }
 
 /* A. 見出し */
 .row.head { height: var(--head-h); }
-.head .round, .head .cell { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; border-bottom: 2px solid var(--ink); }
-.head .round { font-size: 12px; }
+.head .round, .head .cell { font-size: var(--fs-head); font-weight: 700; font-variant-numeric: tabular-nums; border-bottom: 2px solid var(--ink); }
+.head .round { font-size: var(--fs-head-round); }
 
 /* B. 出目表 */
 .row.data { height: var(--row-h); }
-.cell.hit { background: var(--hit); color: var(--hit-ink); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cell.hit { color: #fff; font-size: var(--fs-hit); font-weight: 700; font-variant-numeric: tabular-nums; }
+.cell.main { background: var(--main); }     /* 本数字 */
+.cell.bonus { background: var(--bonus); }   /* ボーナス数字 */
 
 /* C. 予想欄 */
 .row.pred { height: var(--pred-h); }
@@ -102,12 +117,12 @@ body { position: fixed; inset: 0; width: 100%; }
 /* ---- 第2段階:数字選択 ---- */
 .pred .cell[data-n] { cursor: pointer; touch-action: pan-x; }
 .pred .cell.sel {
-  background: var(--accent);
-  color: #fff;
-  font-size: 18px;
+  background: var(--sel);
+  color: var(--sel-ink);
+  font-size: var(--fs-sel);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  box-shadow: inset 0 0 0 2px #fff;   /* 色だけに頼らず、枠でも区別 */
+  box-shadow: inset 0 0 0 max(1px, calc(2px * var(--z))) var(--sel-ink);   /* 色だけに頼らず、枠でも区別 */
 }
 
 #status-bar {
@@ -147,27 +162,31 @@ body { position: fixed; inset: 0; width: 100%; }
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--sel);
+  color: var(--sel-ink);
   font-size: 12px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
-#clear-btn, #latest-btn {
+#clear-btn, #latest-btn, #zoom-out, #zoom-in {
   position: relative;
   flex: none;
-  height: 22px;
-  padding: 0 9px;
+  height: 26px;
+  padding: 0 10px;
   font: inherit;
   font-weight: 700;
   color: var(--ink);
   background: var(--paper-alt);
   border: 1px solid var(--ink);
-  border-radius: 5px;
+  border-radius: 6px;
+  touch-action: manipulation;   /* 連打でSafariのダブルタップ拡大が起きないように */
 }
-/* 見た目は小さく、タップ範囲だけ広げる */
-#clear-btn::after, #latest-btn::after { content: ""; position: absolute; inset: -8px -6px; }
-#clear-btn:active:not(:disabled), #latest-btn:active { background: var(--line); }
-#clear-btn:disabled { opacity: .4; }
+#zoom-out, #zoom-in { min-width: 38px; padding: 0; font-size: 18px; line-height: 1; }
+#latest-btn { margin-left: 8px; }
+#zoom-val { flex: none; min-width: 3.2em; text-align: center; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* 見た目は小さく、タップ範囲だけ少し広げる(隣のボタンと重ならない範囲) */
+#clear-btn::after, #latest-btn::after, #zoom-out::after, #zoom-in::after { content: ""; position: absolute; inset: -3px -3px; }
+#clear-btn:active:not(:disabled), #latest-btn:active, #zoom-out:active:not(:disabled), #zoom-in:active:not(:disabled) { background: var(--line); }
+#clear-btn:disabled, #zoom-out:disabled, #zoom-in:disabled { opacity: .35; }
 @media (prefers-reduced-motion: reduce) { #count.bump { animation: none; } }

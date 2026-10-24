@@ -3,12 +3,15 @@
 
   var COLS = 37;       // 1〜37
   var PICK = 7;        // 仮データ用:1回あたりの本数字の数
+  var BONUS = 2;       // 仮データ用:ボーナス数字の数
   var LAST_ROUND = 699;
   var ROUNDS = 40;     // 仮データの回数
 
   // ---- 仮データ(レイアウト確認用。毎回同じ結果になる擬似乱数) ----
   var seed = 7;
   function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+  var seed2 = 11;      // ボーナス用は別の乱数列(本数字の仮データを変えないため)
+  function rnd2() { seed2 = (seed2 * 1103515245 + 12345) & 0x7fffffff; return seed2 / 0x7fffffff; }
   function makeData() {
     var list = [];
     for (var i = 0; i < ROUNDS; i++) {
@@ -18,7 +21,13 @@
         var v = 1 + Math.floor(rnd() * COLS);
         if (!set[v]) { set[v] = true; n++; }
       }
-      list.push({ round: LAST_ROUND - ROUNDS + 1 + i, nums: set });
+      var bonus = {};
+      var m = 0;
+      while (m < BONUS) {
+        var b = 1 + Math.floor(rnd2() * COLS);
+        if (!set[b] && !bonus[b]) { bonus[b] = true; m++; }
+      }
+      list.push({ round: LAST_ROUND - ROUNDS + 1 + i, nums: set, bonus: bonus });
     }
     return list; // 古い回が上、新しい回が下
   }
@@ -43,8 +52,8 @@
   makeData().forEach(function (d) {
     var row = el('row data');
     buildRow(row, '第' + d.round + '回', function (c) {
-      var hit = !!d.nums[c];
-      return el(colClass(c).replace(' k5', hit ? '' : ' k5') + (hit ? ' hit' : ''), hit ? c : '');
+      var main = !!d.nums[c], bonus = !!d.bonus[c], hit = main || bonus;
+      return el(colClass(c).replace(' k5', hit ? '' : ' k5') + (main ? ' hit main' : bonus ? ' hit bonus' : ''), hit ? c : '');
     });
     tableRows.appendChild(row);
   });
@@ -128,11 +137,48 @@
   function toBottom() { tableScroll.scrollTop = tableScroll.scrollHeight; }
 
   // 「最新回へ戻る」:縦位置だけ最下段へ。横位置(scrollLeft)には触れない
+  // iOS Safariでは scrollTo({behavior:'smooth'}) が効かない/慣性スクロール中は
+  // scrollTop の代入が無視されることがあるため、慣性を止めてから scrollTop を直接代入する。
   document.getElementById('latest-btn').addEventListener('click', function () {
-    var top = tableScroll.scrollHeight - tableScroll.clientHeight;
-    if (tableScroll.scrollTo) tableScroll.scrollTo({ top: top, behavior: 'smooth' });
-    else tableScroll.scrollTop = top;
+    var left = tableScroll.scrollLeft;
+    tableScroll.style.overflowY = 'hidden';          // 慣性スクロールを止める
+    tableScroll.scrollTop = tableScroll.scrollHeight;
+    requestAnimationFrame(function () {
+      tableScroll.style.overflowY = '';
+      tableScroll.scrollTop = tableScroll.scrollHeight;
+      if (tableScroll.scrollLeft !== left) tableScroll.scrollLeft = left;
+    });
   });
+  // ---- 拡大・縮小(操作行は対象外) ----
+  // transformは使わず、CSS変数 --z で列幅・行高・文字サイズを実寸で変える。
+  var ZOOMS = [40, 50, 60, 70, 80, 90, 100, 120, 140];   // %
+  var zi = 6;                                           // 初期 100%
+  var zoomOut = document.getElementById('zoom-out');
+  var zoomIn = document.getElementById('zoom-in');
+  var zoomVal = document.getElementById('zoom-val');
+
+  function setZoom(next) {
+    if (next < 0 || next >= ZOOMS.length || next === zi) return;
+    var ratio = ZOOMS[next] / ZOOMS[zi];
+    var t = tableScroll;
+    // 変更前の「表示の中心」と「最新回を見ているか」を記録
+    var atBottom = t.scrollTop >= t.scrollHeight - t.clientHeight - 2;
+    var cx = t.scrollLeft + t.clientWidth / 2;
+    var cy = t.scrollTop + t.clientHeight / 2;
+    zi = next;
+    document.documentElement.style.setProperty('--z', ZOOMS[zi] / 100);
+    // 以降の読み取りでレイアウトが再計算される。同じ場所が中心に残るようにスクロール位置を補正
+    t.scrollLeft = cx * ratio - t.clientWidth / 2;
+    t.scrollTop = atBottom ? t.scrollHeight : cy * ratio - t.clientHeight / 2;
+    scrollers[0].scrollLeft = scrollers[2].scrollLeft = t.scrollLeft;   // 上下の列位置を確実に揃える
+    zoomVal.textContent = ZOOMS[zi] + '%';
+    zoomOut.disabled = zi === 0;
+    zoomIn.disabled = zi === ZOOMS.length - 1;
+  }
+  zoomOut.addEventListener('click', function () { setZoom(zi - 1); });
+  zoomIn.addEventListener('click', function () { setZoom(zi + 1); });
+  zoomVal.textContent = ZOOMS[zi] + '%';
+
   toBottom();
   window.addEventListener('load', toBottom);
   window.addEventListener('orientationchange', function () { setTimeout(toBottom, 300); });

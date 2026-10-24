@@ -10,12 +10,15 @@
 </head>
 <body>
 <div id="app">
-  <!-- 選択数と全解除(最上段の独立した操作エリア、横スクロールしない) -->
+  <!-- 操作行(最上段・1行・縮尺の対象外・横スクロールしない) -->
   <div id="status-bar">
+    <button id="zoom-out" type="button" aria-label="縮小">−</button>
+    <span id="zoom-val" aria-live="polite">100%</span>
+    <button id="zoom-in" type="button" aria-label="拡大">＋</button>
+    <button id="latest-btn" type="button">最新回へ戻る</button>
     <span id="count-label">選択数</span>
     <span id="count" aria-live="polite">0 / 7</span>
     <span id="picked" aria-label="選択した数字"></span>
-    <button id="latest-btn" type="button">最新回へ戻る</button>
     <button id="clear-btn" type="button" disabled>全解除</button>
   </div>
   <!-- A. 数字の見出し領域 -->
