@@ -10,21 +10,71 @@
 </head>
 <body>
 <div id="app">
-  <!-- 操作行(最上段・1行・縮尺の対象外・横スクロールしない) -->
+  <!-- 操作行：縮尺・最新回・色設定・CSV -->
   <div id="status-bar">
     <button id="zoom-out" type="button" aria-label="縮小">−</button>
-    <span id="zoom-val" aria-live="polite">100%</span>
+    <span id="zoom-val" aria-live="polite">40%</span>
     <button id="zoom-in" type="button" aria-label="拡大">＋</button>
-    <button id="latest-btn" type="button">最新回へ戻る</button>
-    <span id="count-label">選択数</span>
-    <span id="count" aria-live="polite">0 / 7</span>
-    <span id="picked" aria-label="選択した数字"></span>
-    <button id="clear-btn" type="button" disabled>全解除</button>
+    <button id="latest-btn" type="button" aria-label="最新回へ戻る" title="最新回へ戻る">
+      <span class="latest-icon" aria-hidden="true"><span class="latest-arrow">↓</span><span class="latest-line"></span></span>
+    </button>
+    <span id="csv-info" aria-live="polite">サンプル</span>
+    <button id="color-btn" type="button" aria-expanded="false" aria-controls="color-panel">色設定</button>
+    <button id="csv-btn" type="button">CSV読込</button>
+    <span id="toolbar-hint" aria-hidden="true">↔</span>
+    <input id="csv-input" class="file-hidden" type="file" accept=".csv,text/csv,text/comma-separated-values,.txt" aria-label="CSVファイルを選択">
+  </div>
+  <!-- 選択数字行：固定サイズの7枠＋クリア -->
+  <div id="selection-bar">
+    <span id="count-label" aria-hidden="true">選択</span>
+    <span id="count" aria-live="polite" aria-hidden="true"></span>
+    <div id="picked" aria-label="選択した数字">
+      <span class="chip-slot" data-slot="0"></span>
+      <span class="chip-slot" data-slot="1"></span>
+      <span class="chip-slot" data-slot="2"></span>
+      <span class="chip-slot" data-slot="3"></span>
+      <span class="chip-slot" data-slot="4"></span>
+      <span class="chip-slot" data-slot="5"></span>
+      <span class="chip-slot" data-slot="6"></span>
+    </div>
+    <button id="clear-btn" type="button" disabled>クリア</button>
+    <span id="selection-msg" role="status" aria-live="polite"></span>
+  </div>
+  <!-- 色設定パネル(操作行の下に重ねて表示。レイアウトには影響しない) -->
+  <div id="color-panel" role="dialog" aria-label="色設定" hidden>
+    <div class="cp-head">
+      <span class="cp-title">色設定</span>
+      <button id="cp-close" type="button">閉じる</button>
+    </div>
+    <div class="cp-row" data-kind="main">
+      <span class="cp-sample" aria-hidden="true">12</span>
+      <span class="cp-name">本数字</span>
+      <span class="cp-swatches"></span>
+      <label class="cp-free">自由<input type="color" aria-label="本数字の色を自由に選ぶ"></label>
+    </div>
+    <div class="cp-row" data-kind="bonus">
+      <span class="cp-sample" aria-hidden="true">12</span>
+      <span class="cp-name">ボーナス</span>
+      <span class="cp-swatches"></span>
+      <label class="cp-free">自由<input type="color" aria-label="ボーナス数字の色を自由に選ぶ"></label>
+    </div>
+    <div class="cp-foot">
+      <span id="cp-warn" hidden>※本数字とボーナスが同じ色です</span>
+      <button id="cp-reset" type="button">初期設定に戻す</button>
+    </div>
+  </div>
+  <!-- CSV読み込みの結果・エラー表示(重ねて表示。レイアウトには影響しない) -->
+  <div id="csv-msg" role="status" hidden>
+    <div class="cp-head">
+      <span class="cp-title" id="csv-msg-title"></span>
+      <button id="csv-msg-close" type="button">閉じる</button>
+    </div>
+    <div id="csv-msg-body"></div>
   </div>
   <!-- A. 数字の見出し領域 -->
   <div id="head-scroll" class="hscroll"><div id="head-row" class="row head"></div></div>
-  <!-- B. 過去の出目表領域(縦スクロール+横スクロールの親) -->
-  <div id="table-scroll" class="vscroll"><div id="table-rows"></div></div>
+  <!-- B. 過去の出目表領域 v3.9-test: 縦スクロール(外側)と横スクロール(内側 #table-h)を別の要素に分離 -->
+  <div id="table-scroll" class="vscroll"><div id="table-h" class="hscroll"><div id="table-rows"></div></div></div>
   <!-- C. 次回予想欄(下部固定) -->
   <div id="pred-scroll" class="hscroll"><div id="pred-row" class="row pred"></div></div>
 </div>

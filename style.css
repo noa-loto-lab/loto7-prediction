@@ -9,9 +9,10 @@
   --cell-w: calc(44px * var(--z));    /* 数字マスの列 */
   --cols: 37;
   --head-h: calc(30px * var(--z));
-  --row-h: calc(34px * var(--z));
-  --pred-h: calc(48px * var(--z));
-  --stat-h: 32px;                     /* 操作行(縮尺の対象外) */
+  --row-h: calc(44px * var(--z));
+  --pred-h: calc(62px * var(--z));
+  --stat-h: 40px;
+  --pick-h: 38px;                     /* 操作行(縮尺の対象外)。上端から離してタップしやすくする */
 
   --fs-round: max(6px, calc(13px * var(--z)));
   --fs-head: max(6px, calc(14px * var(--z)));
@@ -23,9 +24,11 @@
   --paper-alt: #ebe9e1;
   --ink: #23262b;
   --line: #cfccc0;
-  --main: #d3202c;    /* 本数字:赤 */
-  --bonus: #1f5fd1;   /* ボーナス数字:青 */
-  --sel: #f5b700;     /* 選択中:黄(赤・青と混同しない) */
+  --main: #d3202c;    /* 本数字:赤(色設定で変更される) */
+  --bonus: #f5b700;   /* ボーナス数字:黄色(色設定で変更される) */
+  --main-ink: #ffffff;   /* 数字の文字色(背景色に合わせてJSが白/黒を選ぶ) */
+  --bonus-ink: #1b1b1b;
+  --sel: #d3202c;     /* 選択中は本数字と同じ色 */
   --sel-ink: #1b1b1b;
   --accent: #b5502d;
 }
@@ -51,7 +54,7 @@ body { position: fixed; inset: 0; width: 100%; }
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-rows: var(--stat-h) var(--head-h) minmax(0, 1fr) var(--pred-h);
+  grid-template-rows: var(--stat-h) var(--pick-h) var(--head-h) minmax(0, 1fr) var(--pred-h);
   /* 横向き時のノッチ・ホームバー対策 */
   padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
@@ -66,7 +69,8 @@ body { position: fixed; inset: 0; width: 100%; }
 }
 .hscroll::-webkit-scrollbar, .vscroll::-webkit-scrollbar { display: none; }
 .hscroll { overflow-x: auto; overflow-y: hidden; }
-.vscroll { overflow: auto; }   /* 縦は独立、横は上下の基準になる */
+.vscroll { overflow-x: hidden; overflow-y: auto; }   /* v3.9-test: 縦専用(横は内側の #table-h が担当) */
+#table-h { overscroll-behavior-x: contain; overscroll-behavior-y: auto; }   /* v3.9-test: 縦の操作は外側へ素直に渡す */
 
 /* 行・マス共通 */
 .row {
@@ -84,7 +88,7 @@ body { position: fixed; inset: 0; width: 100%; }
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
-.cell.k5 { background: var(--paper-alt); }   /* 5の倍数の列を薄く色分け */
+.cell.k5 { background: transparent; border-right: 2px solid #8f8b80; } /* 9/19/29の右境界＝10/20/30の区切り */
 
 .round {
   position: sticky;
@@ -105,20 +109,21 @@ body { position: fixed; inset: 0; width: 100%; }
 /* B. 出目表 */
 .row.data { height: var(--row-h); }
 .cell.hit { color: #fff; font-size: var(--fs-hit); font-weight: 700; font-variant-numeric: tabular-nums; }
-.cell.main { background: var(--main); }     /* 本数字 */
-.cell.bonus { background: var(--bonus); }   /* ボーナス数字 */
+.cell.main { background: var(--main); color: var(--main-ink); }     /* 本数字 */
+.cell.bonus { background: var(--bonus); color: var(--bonus-ink); }   /* ボーナス数字 */
 
 /* C. 予想欄 */
-.row.pred { height: var(--pred-h); }
+.row.pred { height: calc(48px * var(--z)); }
+#pred-scroll { display: flex; align-items: flex-start; padding-top: 7px; padding-bottom: max(7px, env(safe-area-inset-bottom, 0px)); }
 .pred .round, .pred .cell { border-top: 3px solid var(--accent); border-bottom: 0; background: var(--paper); }
-.pred .cell.k5 { background: var(--paper-alt); }
+.pred .cell.k5 { background: transparent; border-right: 2px solid #8f8b80; }
 .pred .round { color: var(--accent); }
 
 /* ---- 第2段階:数字選択 ---- */
-.pred .cell[data-n] { cursor: pointer; touch-action: pan-x; }
+.pred .cell[data-n] { cursor: pointer; touch-action: manipulation; }
 .pred .cell.sel {
-  background: var(--sel);
-  color: var(--sel-ink);
+  background: var(--main);
+  color: var(--main-ink);
   font-size: var(--fs-sel);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -128,65 +133,220 @@ body { position: fixed; inset: 0; width: 100%; }
 #status-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 8px;
-  overflow: hidden;
+  gap: 6px;
+  padding: 5px 8px 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   background: var(--paper);
   border-bottom: 1px solid var(--line);
   font-size: 12px;
   white-space: nowrap;
+  position: relative;
 }
-#count-label { flex: none; }
-#count { flex: none; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.4em; }
+#status-bar::-webkit-scrollbar { display: none; }
+#toolbar-hint {
+  position: sticky;
+  right: 0;
+  flex: 0 0 22px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -3px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 800;
+  background: linear-gradient(90deg, rgba(246,245,240,0), var(--paper) 35%);
+  pointer-events: none;
+}
+#status-bar #latest-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 30px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.latest-icon { display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; line-height:1; }
+.latest-arrow { font-size:24px; font-weight:500; line-height:.9; }
+.latest-line { width:20px; height:3px; margin-top:2px; border-radius:2px; background:currentColor; }
+
+#selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 3px 8px;
+  overflow: hidden;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+#count-label { display: none; }
+#count { display: none; }
 #count.full { color: var(--accent); }
 #count.bump { animation: bump .25s; }
 @keyframes bump { 30% { transform: translateX(-4px); } 60% { transform: translateX(4px); } }
 
-/* 選択した数字:小さなラベル。収まらないときは横スクロール(2行にはしない) */
 #picked {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  gap: 3px;
+  overflow: hidden;
 }
-#picked::-webkit-scrollbar { display: none; }
-.chip {
-  flex: none;
-  min-width: 22px;
-  height: 18px;
-  padding: 0 5px;
+.chip-slot {
+  flex: 0 0 27px;
+  width: 27px;
+  height: 27px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid var(--line);
   border-radius: 4px;
-  background: var(--sel);
-  color: var(--sel-ink);
+  background: transparent;
+  color: var(--main-ink);
   font-size: 12px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
+.chip-slot.filled {
+  background: var(--main);
+  border-color: var(--main);
+  color: var(--main-ink);
+}
+#selection-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  color: var(--accent);
+}
+#selection-msg { display: none; }
 
-#clear-btn, #latest-btn, #zoom-out, #zoom-in {
+#clear-btn, #latest-btn, #zoom-out, #zoom-in, #color-btn, #csv-btn {
   position: relative;
   flex: none;
-  height: 26px;
-  padding: 0 10px;
+  height: 30px;
+  padding: 0 8px;
   font: inherit;
   font-weight: 700;
   color: var(--ink);
   background: var(--paper-alt);
   border: 1px solid var(--ink);
   border-radius: 6px;
-  touch-action: manipulation;   /* 連打でSafariのダブルタップ拡大が起きないように */
+  touch-action: manipulation;
 }
-#zoom-out, #zoom-in { min-width: 38px; padding: 0; font-size: 18px; line-height: 1; }
-#latest-btn { margin-left: 8px; }
-#zoom-val { flex: none; min-width: 3.2em; text-align: center; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
-/* 見た目は小さく、タップ範囲だけ少し広げる(隣のボタンと重ならない範囲) */
-#clear-btn::after, #latest-btn::after, #zoom-out::after, #zoom-in::after { content: ""; position: absolute; inset: -3px -3px; }
-#clear-btn:active:not(:disabled), #latest-btn:active, #zoom-out:active:not(:disabled), #zoom-in:active:not(:disabled) { background: var(--line); }
+#zoom-out, #zoom-in { min-width: 40px; padding: 0; font-size: 18px; line-height: 1; }
+#zoom-val { flex: none; min-width: 2.9em; text-align: center; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#clear-btn { height: 30px; min-width: 54px; padding: 0 7px; }
+#clear-btn:active:not(:disabled), #latest-btn:active, #zoom-out:active:not(:disabled), #zoom-in:active:not(:disabled), #color-btn:active, #csv-btn:active { background: var(--line); }
+#color-btn[aria-expanded="true"] { background: var(--ink); color: #fff; }
 #clear-btn:disabled, #zoom-out:disabled, #zoom-in:disabled { opacity: .35; }
 @media (prefers-reduced-motion: reduce) { #count.bump { animation: none; } }
+@media (max-width: 700px) { #count-label { display: none; } }
+
+/* ---- 色設定パネル(重ねて表示) ---- */
+#color-panel, #csv-msg {
+  position: absolute;
+  z-index: 30;
+  top: var(--stat-h);
+  right: calc(env(safe-area-inset-right, 0px) + 6px);
+  width: min(400px, calc(100% - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 12px));
+  max-height: calc(100% - var(--stat-h) - env(safe-area-inset-bottom, 0px) - 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 10px 10px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .28);
+  font-size: 13px;
+  touch-action: manipulation;
+}
+#color-panel[hidden], #csv-msg[hidden] { display: none; }
+.cp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cp-title { font-weight: 800; font-size: 14px; }
+.cp-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); }
+.cp-sample {
+  flex: none; width: 30px; height: 28px; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums;
+  background: var(--main); color: var(--main-ink);
+}
+.cp-row[data-kind="bonus"] .cp-sample { background: var(--bonus); color: var(--bonus-ink); }
+.cp-name { flex: none; width: 4.6em; font-weight: 700; }
+.cp-swatches { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-swatch {
+  width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  border: 2px solid var(--paper); box-shadow: 0 0 0 1px var(--ink);
+  touch-action: manipulation;
+}
+.cp-swatch.on { box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 2px #fff; }
+.cp-free { flex: none; display: flex; align-items: center; gap: 4px; font-weight: 700; }
+.cp-free input[type="color"] { width: 38px; height: 30px; padding: 0; border: 1px solid var(--ink); border-radius: 6px; background: none; }
+.cp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+#cp-warn { color: var(--main); font-weight: 700; font-size: 12px; }
+#cp-warn[hidden] { display: none; }
+#cp-close, #cp-reset, #csv-msg-close {
+  height: 30px; padding: 0 12px; font: inherit; font-weight: 700; color: var(--ink);
+  background: var(--paper-alt); border: 1px solid var(--ink); border-radius: 6px; touch-action: manipulation;
+}
+#cp-reset { margin-left: auto; }
+#cp-close:active, #cp-reset:active, #csv-msg-close:active { background: var(--line); }
+
+/* ---- CSV読み込み ---- */
+.file-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+#csv-info { flex: none; font-size: 11px; font-weight: 700; color: var(--ink); max-width: 7em; overflow: hidden; text-overflow: ellipsis; }
+#csv-msg-body { font-size: 13px; line-height: 1.5; white-space: normal; user-select: text; -webkit-user-select: text; }
+#csv-msg-body ul { margin: 4px 0 0; padding-left: 1.2em; }
+#csv-msg.err { border-color: var(--main); border-width: 2px; }
+#csv-msg.err .cp-title { color: var(--main); }
+
+/* decade separators are applied to .cell.k5 (9, 19, 29) in every row */
+.latest-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  line-height: 1;
+}
+.latest-arrow {
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 0.9;
+}
+.latest-line {
+  width: 20px;
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+#latest-btn {
+  min-width: 40px;
+  width: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* v3.7: shake only the seven selected slots when an eighth number is rejected */
+#picked.limit-shake .chip-slot {
+  animation: picked-limit-shake .28s ease-in-out;
+}
+@keyframes picked-limit-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #picked.limit-shake .chip-slot { animation: none; }
+}
