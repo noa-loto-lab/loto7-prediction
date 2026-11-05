@@ -1,9 +1,24 @@
 (function () {
   'use strict';
 
-  var COLS = 37;       // 1〜37
-  var PICK = 7;        // 仮データ用:1回あたりの本数字の数
-  var BONUS = 2;       // 仮データ用:ボーナス数字の数
+  // ---- くじ種別ごとの設定(今回有効なのはロト7のみ) ----
+  // ロト6・ミニロトを追加するときは、ここに設定を1件足し、default-data.json の lotteries に同じキーでデータを足す。
+  //   id        : IndexedDB(draws の lottery 列・kvのキー)で使う識別子。既存の保存データと同じ値('loto7')を変えないこと
+  //   max       : 最大数字(1〜max)   mainCount / bonusCount : 本数字・ボーナス数字の個数
+  //   csvHeader : CSVの1行目(列構成。この列数・名前と完全一致が必要)
+  //   dataFile / dataKey : 内蔵データファイル名と、その中の lotteries のキー
+  // ※ 画面側(出目表の列数・選択上限 MAX_SELECT・予想メモ・ゲーム切り替えUI)はまだロト7固定。ロト6・ミニロトの画面対応は今回の対象外。
+  var LOTTERY_CONFIG = {
+    loto7: {
+      id: 'loto7', label: 'ロト7', max: 37, mainCount: 7, bonusCount: 2,
+      csvHeader: ['開催回', '開催日', '第1数字', '第2数字', '第3数字', '第4数字', '第5数字', '第6数字', '第7数字', 'ボーナス数字1', 'ボーナス数字2'],
+      dataFile: 'default-data.json', dataKey: 'loto7'
+    }
+  };
+  var CFG = LOTTERY_CONFIG.loto7;   // 現在のくじ種別(今回はロト7固定)
+  var COLS = CFG.max;               // 1〜37
+  var PICK = CFG.mainCount;         // 1回あたりの本数字の数
+  var BONUS = CFG.bonusCount;       // ボーナス数字の数
   var LAST_ROUND = 699;
   var ROUNDS = 40;     // 仮データの回数
 
@@ -71,6 +86,7 @@
     });
   }
   var sampleData = makeData();   // 保存データがないときだけ表示する仮データ(起動処理 startUp で描画)
+  var dataMeta = null;           // 現在の抽選データの読み込み元情報(保存済みのmeta。なければnull)
   var draws = [];                // 現在の抽選データ(全回分・開催回の昇順)。表示は最新40回だけ
 
   var predRow = document.getElementById('pred-row');
@@ -91,7 +107,7 @@
   // ---- ブラウザ内保存(IndexedDB) ----
   // draws: 全抽選回(キー=[くじ種別, 開催回]) / kv: メタ情報と選択数字(キー=種別付き)
   // くじ種別(LOTTERY)ごとにキーを分けているので、将来のロト6・ミニロトも別の値で並べて保存できる。
-  var LOTTERY = 'loto7';
+  var LOTTERY = CFG.id;   // 'loto7'(既存の保存データと同じ値)
   var DB_NAME = 'loto7-prediction', DB_VERSION = 1;
   var KEY_META = 'meta:' + LOTTERY, KEY_SEL = 'selected:' + LOTTERY;
   var dbHandle = null;      // 開けたDB。nullなら保存なし(memoryOnly)
@@ -165,7 +181,7 @@
         list.forEach(function (x) {
           ds.put({ lottery: LOTTERY, round: x.round, date: x.date, nums: numKeys(x.nums), bonus: numKeys(x.bonus) });
         });
-        kv.put({ key: KEY_META, fileName: meta.fileName, count: meta.count, latestRound: meta.latestRound, latestDate: meta.latestDate, savedAt: meta.savedAt });
+        kv.put({ key: KEY_META, kind: meta.kind || 'csv', fileName: meta.fileName, sourceName: meta.sourceName || null, count: meta.count, latestRound: meta.latestRound, latestDate: meta.latestDate, savedAt: meta.savedAt });   // kind/sourceName は追加項目(無い旧データはCSV扱い)
         kv.delete(KEY_SEL);
       } catch (e) { try { tx.abort(); } catch (_) {} reject(e); }
     });
@@ -190,7 +206,7 @@
   }
 
   // ---- 数字選択(第2段階) ----
-  var MAX_SELECT = 7;
+  var MAX_SELECT = CFG.mainCount;
   var selected = {};          // { 数字: true }
   var clearBtn = document.getElementById('clear-btn');
   var pickedEl = document.getElementById('picked');
@@ -259,8 +275,8 @@
   var work = document.getElementById('work');   // 縦横スクロール担当(見出し・出目表・数字タップ欄)
   function toBottom() { work.scrollTop = work.scrollHeight; }   // 最新回(出目表の最下段)と数字タップ欄が見える位置へ
   // ---- 拡大・縮小(操作バーは対象外。最後に使った縮尺を localStorage に保存して次回起動時に復元) ----
-  // transformは使わず、CSS変数 --z で列幅・行高・文字サイズを実寸で変える。
-  var ZOOMS = [30, 40, 50, 60, 70, 80, 90, 100, 120, 140];   // %
+  // 倍率の実体は CSS変数 --z(列幅・行高・文字サイズを実寸で変える)。transform は2本指ピンチの操作中の見た目(プレビュー)にだけ一時的に使う。
+  var ZOOMS = [20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140];   // %(ボタン・ピンチ・保存・復元のすべてがこの一覧を使う。20・25は全体を見渡すための縮小表示)
   var ZOOM_DEFAULT = 40;                                // 保存がない・壊れているときの初期値(%)
   var ZOOM_KEY = 'loto7.zoom';                          // 縮尺だけを保存するキー(表示回数とは別)
   function loadZoomIndex() {
@@ -278,6 +294,7 @@
   var zoomIn = document.getElementById('zoom-in');
 
   function setZoom(next) {
+    if (pinch) cleanupPinch();   // ピンチの途中・仕上げ中にボタンが押されたら、ピンチ用の一時状態を先に片付ける
     if (next < 0 || next >= ZOOMS.length || next === zi) return;
     var ratio = ZOOMS[next] / ZOOMS[zi];
     // 変更前の「表示の中心」と「最新回を見ているか」を記録
@@ -298,6 +315,170 @@
   document.documentElement.style.setProperty('--z', ZOOMS[zi] / 100);
   zoomOut.disabled = zi === 0;
   zoomIn.disabled = zi === ZOOMS.length - 1;
+
+  // ======================================================================
+  // 2本指ピンチでの縮尺変更(既存のズームボタン・保存キー loto7.zoom・10段階の倍率はそのまま)
+  //  - ピンチ中は #work-inner に transform を当てて滑らかにプレビュー(指の中間点が基点。2本指のパンも追従)
+  //  - 離したとき: 最も近い10段階の倍率へ確定(--z とスクロール位置)→ 見た目の差を約150msかけて整える(FLIP)
+  //  - 2本指の間とピンチ直後(400ms)は、数字の選択・解除(click)を遮断。1本指のタップ・スクロールは従来どおり
+  //  - ページ全体の拡大は touch-action(style.css)と gesturestart で抑止。ピンチ開始時の preventDefault は使わない
+  //  - どの終了経路(離す・中断・回転・アプリ切替・放置・ボタン操作)でも cleanupPinch で必ず元に戻す
+  // ======================================================================
+  var PINCH_GUARD_MS = 400;      // ピンチ終了後に数字の選択を受け付けない時間
+  var PINCH_SETTLE_MS = 150;     // 離したあと、見た目を整える時間
+  var PINCH_WATCHDOG_MS = 5000;  // 指が離れたイベントを取りこぼしたときの保険(指を動かさず押さえているだけでは動かない長さ)
+  var PINCH_MIN_D0 = 24;         // 開始時の指の間隔の下限(px。近すぎると倍率が暴れる)
+  var workInner = document.getElementById('work-inner');
+  var pinch = null;              // 進行中のピンチ { phase: 'active' | 'settling', ... }
+  var multiTouchSeq = false;     // 今のタッチ列で2本指になった(すべての指が離れるまで true)
+  var lastMultiEnd = -1e9;       // 複数指のタッチ列が最後に終わった時刻
+  var pinchSettleTimer = null, pinchWatchdog = null;
+
+  function pnow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function tDist(a, b) { var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY; return Math.sqrt(dx * dx + dy * dy); }
+  function tMid(a, b) { return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 }; }
+  function touchById(list, id) { for (var i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i]; return null; }
+  function updateZoomButtons() { zoomOut.disabled = zi === 0; zoomIn.disabled = zi === ZOOMS.length - 1; }
+
+  // ピンチ用の一時状態をすべて元に戻す(何度呼んでも同じ結果。#work / #work-inner にはこれ以外にインラインスタイルを使っていない)
+  function cleanupPinch() {
+    clearTimeout(pinchSettleTimer); pinchSettleTimer = null;
+    clearTimeout(pinchWatchdog); pinchWatchdog = null;
+    work.style.removeProperty('overflow');
+    workInner.style.removeProperty('transform');
+    workInner.style.removeProperty('transform-origin');
+    workInner.style.removeProperty('transition');
+    workInner.style.removeProperty('will-change');
+    pinch = null;
+  }
+  // 中断(touchcancel・回転・アプリ切替・放置など): 倍率は変えず、スクロール位置も元のまま
+  function cancelPinch() {
+    if (!pinch) return;
+    if (pinch.phase === 'active') { var p = pinch; cleanupPinch(); work.scrollLeft = p.sl0; work.scrollTop = p.st0; }
+    else cleanupPinch();
+  }
+  function armPinchWatchdog() {
+    clearTimeout(pinchWatchdog);
+    pinchWatchdog = setTimeout(function () {
+      if (pinch && pinch.phase === 'active') { cancelPinch(); multiTouchSeq = false; lastMultiEnd = pnow(); }
+    }, PINCH_WATCHDOG_MS);
+  }
+
+  function startPinch(e) {
+    if (pinch && pinch.phase === 'settling') cleanupPinch();   // 仕上げ中に次のピンチ: 前の結果はすでに確定済みなので一時状態だけ片付ける
+    if (pinch) return;                                         // 3本目以降は無視
+    var ts = [];
+    for (var i = 0; i < e.touches.length; i++) if (work.contains(e.touches[i].target)) ts.push(e.touches[i]);
+    if (ts.length < 2) return;
+    var r = work.getBoundingClientRect();
+    var L = r.left + work.clientLeft, T = r.top + work.clientTop;   // コンテンツ座標の原点(②の上罫線1pxも考慮)
+    var F0 = tMid(ts[0], ts[1]);
+    pinch = {
+      phase: 'active', id0: ts[0].identifier, id1: ts[1].identifier,
+      L: L, T: T, F0: F0, F: F0, d0: Math.max(PINCH_MIN_D0, tDist(ts[0], ts[1])), s: 1,
+      sl0: work.scrollLeft, st0: work.scrollTop, z0: ZOOMS[zi],
+      O: { x: work.scrollLeft + F0.x - L, y: work.scrollTop + F0.y - T }   // 焦点のコンテンツ座標(拡大縮小の基点)
+    };
+    work.style.overflow = 'hidden';   // 1本指ですでにスクロール中だった場合に備え、ピンチ中はスクロールを止める
+    workInner.style.transition = 'none';
+    workInner.style.transformOrigin = pinch.O.x + 'px ' + pinch.O.y + 'px';
+    workInner.style.willChange = 'transform';
+    armPinchWatchdog();
+  }
+
+  function movePinch(e) {
+    var p = pinch;
+    var a = touchById(e.touches, p.id0), b = touchById(e.touches, p.id1);
+    if (!a || !b) return;
+    var sMin = ZOOMS[0] / p.z0, sMax = ZOOMS[ZOOMS.length - 1] / p.z0;
+    var s = Math.max(sMin, Math.min(sMax, tDist(a, b) / p.d0));
+    var F = tMid(a, b);
+    p.s = s; p.F = F;
+    // 基点 O が常に現在の指の中間点 F に表示される: translate(F-F0) scale(s)(基点 O)
+    workInner.style.transform = 'translate(' + (F.x - p.F0.x) + 'px,' + (F.y - p.F0.y) + 'px) scale(' + s + ')';
+    armPinchWatchdog();
+  }
+
+  // 指を離した: 最も近い倍率へ確定し、確定直前のプレビューと同じ見た目から約150msで本来の位置へ整える(FLIP)
+  function commitPinch() {
+    var p = pinch;
+    if (!p || p.phase !== 'active') return;
+    clearTimeout(pinchWatchdog); pinchWatchdog = null;
+    var zLive = p.z0 * p.s, best = 0;
+    for (var i = 1; i < ZOOMS.length; i++) if (Math.abs(ZOOMS[i] - zLive) < Math.abs(ZOOMS[best] - zLive)) best = i;
+    var r = ZOOMS[best] / p.z0, F = p.F, changed = best !== zi;
+    if (changed) { zi = best; document.documentElement.style.setProperty('--z', ZOOMS[zi] / 100); }
+    work.style.removeProperty('overflow');
+    // プレビューの transform を外してからレイアウトを確定する(transform が残っているとスクロール可能範囲の計算がずれる)
+    workInner.style.transition = 'none';
+    workInner.style.transform = 'none';
+    workInner.style.transformOrigin = '0 0';
+    void work.scrollWidth;   // レイアウトを確定してからスクロール位置を設定(範囲外はブラウザが範囲内に収める)
+    work.scrollLeft = r * p.O.x - (F.x - p.L);
+    work.scrollTop = r * p.O.y - (F.y - p.T);
+    var sl1 = work.scrollLeft, st1 = work.scrollTop;   // 実際に設定された値
+    updateZoomButtons();
+    if (changed) saveZoom();
+    // 確定後のレイアウトの上に「確定直前と同じ見た目」になる逆変換を当て、そこから恒等変換へ戻す
+    var k = p.s / r;
+    var ex = sl1 - p.sl0 + (1 - p.s) * p.O.x + (F.x - p.F0.x);
+    var ey = st1 - p.st0 + (1 - p.s) * p.O.y + (F.y - p.F0.y);
+    workInner.style.transition = 'none';
+    workInner.style.transformOrigin = '0 0';
+    workInner.style.transform = 'translate(' + ex + 'px,' + ey + 'px) scale(' + k + ')';
+    void workInner.offsetWidth;
+    workInner.style.transition = 'transform ' + PINCH_SETTLE_MS + 'ms ease-out';
+    workInner.style.transform = 'translate(0px,0px) scale(1)';
+    p.phase = 'settling';
+    clearTimeout(pinchSettleTimer);
+    pinchSettleTimer = setTimeout(cleanupPinch, PINCH_SETTLE_MS + 70);
+  }
+
+  work.addEventListener('touchstart', function (e) {
+    if (e.touches.length === 1) {   // 新しい1本指のタッチ列(以前の列は終わっている)
+      multiTouchSeq = false;
+      if (pinch && pinch.phase === 'settling') cleanupPinch();
+      return;
+    }
+    multiTouchSeq = true;           // 2本指以上: すべての指が離れるまで数字の選択を遮断
+    startPinch(e);
+  }, { passive: true });
+  work.addEventListener('touchmove', function (e) {
+    if (pinch && pinch.phase === 'active') {
+      movePinch(e);
+      if (e.cancelable) e.preventDefault();   // 2本指の間だけ、スクロール・拡大の既定動作を止める
+    } else if (multiTouchSeq && e.cancelable) {
+      e.preventDefault();                     // ピンチ後に残った指でスクロールが始まらないように(すべて離れるまで)
+    }
+  }, { passive: false });
+  function onPinchTouchEnd(e) {
+    try {
+      if (pinch && pinch.phase === 'active') {
+        if (e.type === 'touchcancel') cancelPinch();
+        else if (!touchById(e.touches, pinch.id0) || !touchById(e.touches, pinch.id1)) commitPinch();
+      }
+    } catch (err) { cleanupPinch(); }
+    if (e.touches.length === 0 && multiTouchSeq) { multiTouchSeq = false; lastMultiEnd = pnow(); }
+  }
+  work.addEventListener('touchend', onPinchTouchEnd, { passive: true });
+  work.addEventListener('touchcancel', onPinchTouchEnd, { passive: true });
+
+  // 数字の選択(#pred-row の click)に届く前に遮断: 2本指の間と、すべての指が離れてから400ms以内
+  work.addEventListener('click', function (e) {
+    if (pinch || multiTouchSeq || pnow() - lastMultiEnd < PINCH_GUARD_MS) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  // 座標の基準が変わる・指のイベントが届かなくなる場合は中断して元に戻す
+  function abortPinchOnEnvChange() { if (pinch) { cancelPinch(); if (multiTouchSeq) { multiTouchSeq = false; lastMultiEnd = pnow(); } } }
+  window.addEventListener('resize', abortPinchOnEnvChange);
+  window.addEventListener('orientationchange', abortPinchOnEnvChange);
+  window.addEventListener('pagehide', abortPinchOnEnvChange);
+  window.addEventListener('blur', abortPinchOnEnvChange);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') abortPinchOnEnvChange(); });
+  // iOS のページ全体のピンチ拡大は、出目表の上で始まったときだけ打ち消す(Safari 専用イベント。他の場所の動作は変えない)
+  function blockPageZoom(e) { if (work.contains(e.target)) e.preventDefault(); }
+  document.addEventListener('gesturestart', blockPageZoom, { passive: false });
+  document.addEventListener('gesturechange', blockPageZoom, { passive: false });
 
   // ---- 色設定(本数字・ボーナス数字の色。localStorageに保存) ----
   var DEFAULT_COLORS = { main: '#d3202c', bonus: '#f5b700' };
@@ -399,7 +580,7 @@
   }
   var SHOW_ROUNDS = loadShowRounds();         // 表示する直近の回数
   var MAX_CSV_BYTES = 5 * 1024 * 1024;
-  var CSV_HEADER = ['開催回', '開催日', '第1数字', '第2数字', '第3数字', '第4数字', '第5数字', '第6数字', '第7数字', 'ボーナス数字1', 'ボーナス数字2'];
+  var CSV_HEADER = CFG.csvHeader;
   var csvBtn = document.getElementById('csv-btn');
   var csvInput = document.getElementById('csv-input');
   var csvMsg = document.getElementById('csv-msg');
@@ -506,6 +687,45 @@
     return { errors: errors, list: list };
   }
 
+  // 読み込み成功後の画面反映(CSV読み込みと内蔵データ読み込みで共用)。保存(persistReplace)が完了してから呼ぶこと。
+  // 抽選データの差し替え → 選択数字のリセット → 最新回へスクロール → 予想メモの対象回を最新回+1へ切替(既存の予想メモは削除しない)
+  function applyLoaded(list, meta, title, headLines, extra) {
+    var latest = list[list.length - 1];
+    draws = list;
+    dataMeta = meta;
+    showDraws(meta);
+    selected = {};   // 次の抽選回の予想を始める(保存側の選択は保存処理の中で消去済み)
+    fromMemo = null; // v4.0: 呼び出し元の表示も消す
+    render();
+    toBottom();      // 最新回(最下段)が見える位置へ
+    var shown = Math.min(SHOW_ROUNDS, list.length);
+    var lines = headLines.concat([
+      list.length + '回分(第' + list[0].round + '〜' + latest.round + '回)',
+      '最新:第' + latest.round + '回(' + latest.date + ')。直近' + shown + '回を表示しています。',
+      '選択数字をリセットしました。次回の予想を始められます。',
+      '予想メモの対象を第' + (latest.round + 1) + '回に切り替えました(過去回の予想メモは残っています)。'
+    ]);
+    memoViewKey = null;   // v4.0: 予想メモ画面は新しい対象回を表示
+    renderMemo();
+    renderDataInfo();
+    // 抽選データの保存が済んだ後で、サンプル用メモ(抽選データ未読込のときに作られた予想)が残っていれば削除する
+    var sampleN = memoReady ? memos.filter(isSampleMemo).length : 0;
+    if (!sampleN) { showMsg(false, title, lines.concat(extra)); return; }
+    cleanupSampleMemos(sampleN).then(function (r) { showMsg(false, title, lines.concat(r).concat(extra)); });
+  }
+
+  // サンプル用メモの削除(失敗しても抽選データはそのまま。再読み込みで再試行できる)。解決値=メッセージ行の配列
+  function cleanupSampleMemos(n) {
+    var retry = ['※サンプル用の予想メモ' + n + '口は削除できませんでした。抽選データは読み込み済みです。もう一度読み込むと削除を再試行します(予想メモ画面から1口ずつ削除もできます)。'];
+    function ok(k) { return ['サンプル用の予想メモ' + k + '口を削除しました(実データ用の予想メモはそのままです)。']; }
+    if (memoBusy) return Promise.resolve(retry);
+    function dropFromScreen() { memos = memos.filter(function (m) { return !isSampleMemo(m); }); renderMemo(); }
+    if (memoMemoryOnly) { dropFromScreen(); delete memoLocalSeq.sample; return Promise.resolve(ok(n)); }
+    memoBusy = true;
+    return dbDeleteSampleMemos().then(function (k) { memoBusy = false; dropFromScreen(); return ok(k); },
+                                      function () { memoBusy = false; return retry; });
+  }
+
   function loadCsvFile(file) {
     if (!file) return;
     if (!ready || busy) { showMsg(true, '少し待ってください', ['保存の準備中、または保存中です。数秒後にもう一度お試しください。', '以前のデータはそのままです。']); return; }
@@ -527,30 +747,13 @@
       // 保存できたときだけ画面の抽選データを切り替え、選択数字をリセットする。失敗したら以前の抽選データ・選択数字を維持する
       var list = result.list.sort(function (a, b) { return a.round - b.round; });
       var latest = list[list.length - 1];
-      var meta = { fileName: file.name, count: list.length, latestRound: latest.round, latestDate: latest.date, savedAt: Date.now() };
-      function applyNew(extra) {
-        draws = list;
-        showDraws(meta);
-        selected = {};   // 次の抽選回の予想を始める(保存側の選択は保存処理の中で消去済み)
-        fromMemo = null; // v4.0: 呼び出し元の表示も消す
-        render();
-        toBottom();      // 最新回(最下段)が見える位置へ
-        var shown = Math.min(SHOW_ROUNDS, list.length);
-        showMsg(false, '読み込みました', [
-          'ファイル:' + file.name,
-          list.length + '回分(第' + list[0].round + '〜' + latest.round + '回)',
-          '最新:第' + latest.round + '回(' + latest.date + ')。直近' + shown + '回を表示しています。',
-          '選択数字をリセットしました。次回の予想を始められます。',
-          '予想メモの対象を第' + (latest.round + 1) + '回に切り替えました(過去回の予想メモは残っています)。'
-        ].concat(extra));
-        memoViewKey = null;   // v4.0: 予想メモ画面は新しい対象回を表示
-        renderMemo();
-      }
-      if (memoryOnly) { applyNew(['※この端末では保存できません。画面を閉じると消えます。']); return; }
+      var meta = { kind: 'csv', fileName: file.name, count: list.length, latestRound: latest.round, latestDate: latest.date, savedAt: Date.now() };
+      var head = ['ファイル:' + file.name];
+      if (memoryOnly) { applyLoaded(list, meta, '読み込みました', head, ['※この端末では保存できません。画面を閉じると消えます。']); return; }
       busy = true;
       persistReplace(list, meta).then(function () {
         busy = false;
-        applyNew([]);
+        applyLoaded(list, meta, '読み込みました', head, []);
       }, function () {
         busy = false;
         showMsg(true, '保存できませんでした', [
@@ -575,6 +778,178 @@
     loadCsvFile(f);
     csvInput.value = '';   // 同じファイルをもう一度選べるようにする
   });
+
+  // ======================================================================
+  // 内蔵データ読み込み(default-data.json)
+  //  - ユーザーが「内蔵データを読み込む」を押したときだけ動く(自動読み込みはしない)
+  //  - 流れ: 置き換え確認 → fetch → JSON解析 → 検証 → 保存(persistReplace=CSVと同じ全件置換トランザクション) → 画面反映
+  //  - どこで失敗しても、既存の抽選データ・選択数字・予想メモはそのまま(画面反映は保存完了後だけ)
+  //  - 予想メモDB・色・倍率・表示回数には触れない
+  // ======================================================================
+  var BUILTIN_TIMEOUT_MS = 15000;
+  var MAX_BUILTIN_CHARS = 5 * 1024 * 1024;
+  var builtinBtn = document.getElementById('builtin-btn');
+  var builtinLoading = false;   // 確認中・取得中・保存中は再度受け付けない
+
+  function isInt(v) { return typeof v === 'number' && Math.floor(v) === v; }
+
+  // 内蔵データの検証(CSVの検証と同じ基準:範囲・個数・重複)。戻り値 { errors, list, source }
+  function validateBuiltin(json) {
+    var errors = [], list = [];
+    function err(m) { errors.push(m); }
+    function bail(m) { return { errors: [m], list: [], source: '' }; }
+    if (!json || typeof json !== 'object' || Array.isArray(json)) return bail('内蔵データの形式が正しくありません。');
+    if (json.schemaVersion !== 1) return bail('内蔵データの形式バージョン(schemaVersion)が想定と違います。');
+    if (!json.lotteries || typeof json.lotteries !== 'object') return bail('内蔵データに lotteries がありません。');
+    var e = json.lotteries[CFG.dataKey];
+    if (!e || typeof e !== 'object') return bail('内蔵データに' + CFG.label + '(' + CFG.dataKey + ')のデータがありません。');
+    if (typeof e.source !== 'string' || !e.source) return bail('内蔵データの元ファイル名(source)がありません。');
+    if (!Array.isArray(e.draws) || !e.draws.length) return bail('内蔵データに抽選履歴がありません。');
+    var seen = {};
+    function numsOk(a, n) {
+      if (!Array.isArray(a) || a.length !== n) return false;
+      for (var i = 0; i < a.length; i++) if (!isInt(a[i]) || a[i] < 1 || a[i] > COLS) return false;
+      return true;
+    }
+    e.draws.forEach(function (d, i) {
+      var at = (i + 1) + '件目:';
+      if (!d || typeof d !== 'object') { err(at + '形式が正しくありません。'); return; }
+      if (!isInt(d.round) || d.round < 1) { err(at + '開催回「' + d.round + '」が正しくありません。'); return; }
+      if (seen[d.round]) { err(at + '開催回' + d.round + 'が重複しています。'); return; }
+      seen[d.round] = true;
+      var bad = false;
+      var date = typeof d.date === 'string' ? parseDate(d.date) : null;
+      if (!date) { err(at + '第' + d.round + '回の開催日「' + d.date + '」を読み取れません。'); bad = true; }
+      var nums = {}, bonus = {};
+      if (!numsOk(d.main, PICK)) { err(at + '第' + d.round + '回の本数字が正しくありません(1〜' + COLS + 'の整数を' + PICK + '個)。'); bad = true; }
+      else {
+        d.main.forEach(function (v) { nums[v] = true; });
+        if (Object.keys(nums).length !== PICK) { err(at + '第' + d.round + '回の本数字に重複があります。'); bad = true; }
+      }
+      if (!numsOk(d.bonus, BONUS)) { err(at + '第' + d.round + '回のボーナス数字が正しくありません(1〜' + COLS + 'の整数を' + BONUS + '個)。'); bad = true; }
+      else {
+        d.bonus.forEach(function (v) { bonus[v] = true; });
+        var overlap = Object.keys(bonus).length !== BONUS || d.bonus.some(function (v) { return nums[v]; });
+        if (overlap) { err(at + '第' + d.round + '回のボーナス数字が、本数字または他のボーナス数字と重複しています。'); bad = true; }
+      }
+      if (!bad) list.push({ round: d.round, date: date, nums: nums, bonus: bonus });
+    });
+    if (errors.length) return { errors: errors, list: [], source: e.source };
+    list.sort(function (a, b) { return a.round - b.round; });
+    var latest = list[list.length - 1];
+    if (e.count !== list.length) err('収録回数(count=' + e.count + ')と実際の件数(' + list.length + ')が一致しません。');
+    if (e.latestRound !== latest.round) err('最新回(latestRound=' + e.latestRound + ')と実際の最新回(' + latest.round + ')が一致しません。');
+    if (typeof e.latestDate !== 'string' || parseDate(e.latestDate) !== latest.date) err('最新開催日(latestDate)が実際の最新回の開催日と一致しません。');
+    return { errors: errors, list: errors.length ? [] : list, source: e.source };
+  }
+
+  function loadBuiltin() {
+    if (builtinLoading) return;
+    if (!ready || busy) { showMsg(true, '少し待ってください', ['保存の準備中、または保存中です。数秒後にもう一度お試しください。', '以前のデータはそのままです。']); return; }
+    var hasData = draws.length > 0;
+    var sampleN = memoReady ? memos.filter(isSampleMemo).length : 0;
+    if (hasData || selectedCount() > 0 || sampleN > 0) {
+      builtinLoading = true;   // 確認ダイアログ表示中の二重起動を防ぐ
+      var text = (hasData ? '現在の抽選データ(' + draws.length + '回分、最新第' + draws[draws.length - 1].round + '回)を内蔵データに置き換えます。' : '')
+        + '選択中の数字はリセットされます。実データ用の予想メモ・色・倍率・表示回数は変わりません。'
+        + (sampleN ? '読み込みに成功すると、サンプル用の予想メモ' + sampleN + '口は削除されます。' : '');
+      askConfirm('内蔵データで置き換えますか?', text, '置き換える', 'primary').then(function (ok) {
+        builtinLoading = false;
+        if (ok) runBuiltin();
+      });
+    } else {
+      runBuiltin();
+    }
+  }
+
+  function runBuiltin() {
+    if (builtinLoading) return;
+    if (!ready || busy) { showMsg(true, '少し待ってください', ['保存の準備中、または保存中です。数秒後にもう一度お試しください。', '以前のデータはそのままです。']); return; }
+    var KEPT = '既存の抽選データ・選択数字・予想メモはそのままです。';
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, BUILTIN_TIMEOUT_MS);
+    builtinLoading = true; busy = true;   // 取得〜保存の間は数字の選択・クリア・CSV読み込みを受け付けない
+    function done() { clearTimeout(timer); busy = false; builtinLoading = false; }
+    function fail(title, lines) { done(); showMsg(true, title, lines.concat([KEPT])); }
+    function stepError(step, lines) { var x = new Error(step); x.step = step; x.lines = lines; return x; }
+
+    var req;
+    try { req = fetch(CFG.dataFile, { cache: 'no-store', signal: ctl ? ctl.signal : undefined }); }
+    catch (e0) { fail('内蔵データを取得できませんでした', ['通信またはファイルの取得に失敗しました。']); return; }
+    req.then(function (res) {
+      if (!res.ok) throw stepError('fetch', ['内蔵データファイル(' + CFG.dataFile + ')を取得できませんでした(HTTP ' + res.status + ')。']);
+      return res.text();
+    }, function () {
+      throw stepError('fetch', ['内蔵データファイル(' + CFG.dataFile + ')を取得できませんでした(通信エラーまたは時間切れ)。', '通信環境を確認して、もう一度お試しください。']);
+    }).then(function (text) {
+      if (text.length > MAX_BUILTIN_CHARS) throw stepError('parse', ['内蔵データファイルが大きすぎます(5MBまで)。']);
+      var json;
+      try { json = JSON.parse(text); } catch (e1) { throw stepError('parse', ['内蔵データファイルを読み取れませんでした(JSONの形式エラー)。']); }
+      var r = validateBuiltin(json);
+      if (r.errors.length) {
+        var lines = r.errors.slice(0, 8);
+        if (r.errors.length > 8) lines.push('ほか' + (r.errors.length - 8) + '件のエラーがあります。');
+        throw stepError('validate', lines);
+      }
+      var list = r.list, latest = list[list.length - 1];
+      var meta = { kind: 'builtin', fileName: CFG.dataFile, sourceName: r.source, count: list.length, latestRound: latest.round, latestDate: latest.date, savedAt: Date.now() };
+      var head = ['内蔵データ:' + CFG.dataFile + '(元のCSV:' + r.source + ')'];
+      if (memoryOnly) { done(); applyLoaded(list, meta, '内蔵データを読み込みました', head, ['※この端末では保存できません。画面を閉じると消えます。']); return; }
+      return persistReplace(list, meta).then(function () {
+        done();
+        applyLoaded(list, meta, '内蔵データを読み込みました', head, []);
+      }, function () {
+        throw stepError('save', ['内蔵データをブラウザに保存できなかったため、読み込みを取り消しました。', '端末の空き容量を確認して、もう一度お試しください。']);
+      });
+    }).catch(function (e) {
+      if (e && e.step === 'validate') fail('内蔵データに問題があります', e.lines);
+      else if (e && e.step) fail(e.step === 'save' ? '保存できませんでした' : '内蔵データを読み込めませんでした', e.lines);
+      else { done(); showMsg(true, '内蔵データの読み込み中にエラーが起きました', ['画面の表示が正しいか確認してください。必要なら画面を開き直してください。']); }
+    });
+  }
+
+  builtinBtn.addEventListener('click', function () { setSettings(false); loadBuiltin(); });
+
+  // ---- 設定パネルの「現在の抽選データ」表示(読み込み方法・読み込み元・収録回数・最新回) ----
+  // 収録回数と最新回は実際の抽選データ(draws)から求める。meta が無い・壊れている場合も読み込み元だけ「不明」にして表示する。
+  var dataInfoEl = document.getElementById('data-info');
+  function fmtSavedAt(t) {
+    if (!isInt(t) || t <= 0) return '';
+    var d = new Date(t);
+    if (isNaN(d.getTime())) return '';
+    function z(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '/' + z(d.getMonth() + 1) + '/' + z(d.getDate()) + ' ' + z(d.getHours()) + ':' + z(d.getMinutes());
+  }
+  function renderDataInfo() {
+    var rows = [];
+    if (!draws.length) {
+      rows.push(['抽選データ', '未読み込み(サンプル表示)']);
+    } else {
+      var m = (dataMeta && typeof dataMeta === 'object') ? dataMeta : null;
+      var kind = '不明', src = '記録なし';
+      if (m && m.kind === 'builtin') {
+        kind = '内蔵データ';
+        src = (typeof m.fileName === 'string' && m.fileName ? m.fileName : CFG.dataFile) + (typeof m.sourceName === 'string' && m.sourceName ? '(元のCSV:' + m.sourceName + ')' : '');
+      } else if (m && typeof m.fileName === 'string' && m.fileName) {
+        kind = 'CSV読み込み';
+        src = m.fileName;
+      }
+      var latest = draws[draws.length - 1];
+      rows.push(['読み込み方法', kind]);
+      rows.push(['読み込み元', src]);
+      rows.push(['収録回数', draws.length + '回分(第' + draws[0].round + '〜' + latest.round + '回)']);
+      rows.push(['最新回', '第' + latest.round + '回' + (latest.date ? '(' + latest.date + ')' : '')]);
+      var at = m ? fmtSavedAt(m.savedAt) : '';
+      if (at) rows.push(['読み込み日時', at]);
+    }
+    dataInfoEl.textContent = '';
+    rows.forEach(function (r) {
+      var line = document.createElement('div'); line.className = 'sp-info-row';
+      var k = document.createElement('span'); k.className = 'sp-info-k'; k.textContent = r[0];
+      var v = document.createElement('span'); v.className = 'sp-info-v'; v.textContent = r[1];
+      line.appendChild(k); line.appendChild(v); dataInfoEl.appendChild(line);
+    });
+  }
 
   // ---- 設定パネル(歯車ボタン。CSV読み込み・色指定の2項目。画面下部に重ねて表示) ----
   // 「ロト7 CSV読み込み」(#csv-btn)は上の既存処理がそのままファイル選択を開く。「色指定」(#color-btn)も既存処理がそのまま色設定パネルを開く。
@@ -748,6 +1123,54 @@
       tx.onerror = tx.onabort = function () { reject(tx.error || new Error('削除失敗')); };
     });
   }
+  // サンプル用メモ(抽選データ未読込のときに作られた予想)か。内容(数字・印)では判定せず、アプリが付ける固定の識別値だけで判定する。
+  // 実データ用のメモは target が 'r'+開催回、round が整数なので、ここには当てはまらない。
+  function isSampleMemo(m) { return !!m && m.lottery === LOTTERY && m.target === 'sample' && m.round === null; }
+  // サンプル用メモと、その予想番号カウンタ(meta の 'seq:sample')を1つのトランザクションで削除。解決値=削除した口数。
+  // 'sample' でも条件に合わない記録が残る場合は、カウンタは消さない。
+  function dbDeleteSampleMemos() {
+    return new Promise(function (resolve, reject) {
+      if (!memoDb) { reject(new Error('メモDBなし')); return; }
+      var tx;
+      try { tx = memoDb.transaction(['memos', 'meta'], 'readwrite'); } catch (e) { reject(e); return; }
+      var removed = 0, other = 0;
+      tx.oncomplete = function () { resolve(removed); };
+      tx.onerror = tx.onabort = function () { reject(tx.error || new Error('削除失敗')); };
+      tx.objectStore('memos').openCursor().onsuccess = function (e) {
+        try {
+          var c = e.target.result;
+          if (c) {
+            var r = c.value;
+            if (isSampleMemo(r)) { c.delete(); removed++; }
+            else if (r && r.target === 'sample') other++;
+            c.continue();
+            return;
+          }
+          if (!other) tx.objectStore('meta').delete('seq:sample');
+        } catch (err) { try { tx.abort(); } catch (e2) { reject(err); } }   // 途中で失敗したら全体を取り消す
+      };
+    });
+  }
+  // 指定した回(target)のメモだけを1つのトランザクションで削除(途中で失敗したら全部取り消し)。
+  // 各メモはトランザクション内で target を再確認してから削除し、他の回のメモには触れない。予想番号カウンタ(meta)は変更しない。
+  function dbDeleteMemosOfTarget(key, ids) {
+    return new Promise(function (resolve, reject) {
+      if (!memoDb) { reject(new Error('メモDBなし')); return; }
+      var tx;
+      try { tx = memoDb.transaction(['memos'], 'readwrite'); } catch (e) { reject(e); return; }
+      var store = tx.objectStore('memos'), removed = 0;
+      tx.oncomplete = function () { resolve(removed); };
+      tx.onerror = tx.onabort = function () { reject(tx.error || new Error('削除失敗')); };
+      ids.forEach(function (id) {
+        store.get(id).onsuccess = function (e) {
+          try {
+            var r = e.target.result;
+            if (r && r.lottery === LOTTERY && r.target === key) { store.delete(id); removed++; }
+          } catch (err) { try { tx.abort(); } catch (e2) { reject(err); } }   // 途中で失敗したら全体を取り消す
+        };
+      });
+    });
+  }
   function memoSaveFailed(what) {
     clearTimeout(toastTimer); toastEl.hidden = true;   // 直前の「保存しました」が残って誤解されないように消す
     showMsg(true, what + 'できませんでした', ['ブラウザへの保存に失敗したため、変更しませんでした(画面の予想メモはそのままです)。', '端末の空き容量を確認して、もう一度お試しください。']);
@@ -798,6 +1221,7 @@
     if (open) {
       setPanel(false); setSettings(false);
       memoScreen.style.transform = '';
+      setMemoLevel(1);                       // 開くたびに通常サイズ
       memoScreen.hidden = false;
       renderMemo(); memoList.scrollTop = 0;
       void memoScreen.offsetHeight;          // 表示してから動かす(アニメーションの開始位置を確定)
@@ -812,30 +1236,78 @@
   document.getElementById('memo-close').addEventListener('click', function () { setMemoSheet(false); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && memoOpen) setMemoSheet(false); });
 
-  // 下スワイプで閉じる。反応するのはシート上部(つまみ+見出し)だけで、一覧のスクロールとは干渉しない
+  // ---- 予想メモ欄の高さ(3段階:1=通常 / 2=中 / 3=最大) ----
+  // 高さの実体は CSS(#memo-screen の data-level)。段階の高さ(px)はドラッグ開始時に実際の CSS から測るので、
+  // 縦横の向き・画面サイズ・横向き1段化(--pick-h)に自動で追従する。
+  var MEMO_LEVELS = 3;
+  var memoLevel = 1;
+  function setMemoLevel(n) {
+    memoLevel = n;
+    memoScreen.setAttribute('data-level', String(n));
+    memoScreen.style.height = '';
+  }
+  function measureLevels() {   // 呼び出し前に dragging クラスを付けておくこと(アニメーションなしで測るため)
+    var keep = memoScreen.getAttribute('data-level'), inl = memoScreen.style.height, hs = [0];
+    memoScreen.style.height = '';
+    for (var i = 1; i <= MEMO_LEVELS; i++) { memoScreen.setAttribute('data-level', String(i)); hs.push(memoScreen.offsetHeight); }
+    memoScreen.setAttribute('data-level', keep);
+    memoScreen.style.height = inl;
+    return hs;
+  }
+
+  // シート上部(つまみ+見出し)のドラッグ。反応するのはここだけで、一覧のスクロールとは干渉しない。
+  //  上へ引く → 一段ずつ拡大 / 下へ引く → 一段ずつ縮小 / 通常サイズからさらに下へ引く → 閉じる(従来どおり 80px以上 または 素早く)
+  //  1回のドラッグで動くのは最大一段。指に合わせて高さが連続して変わり、離すと最寄りの段階へ収まる。
   var sheetDrag = null;
   memoTop.addEventListener('pointerdown', function (e) {
     if (!memoOpen || e.target.closest('button')) return;
-    sheetDrag = { id: e.pointerId, y0: e.clientY, t0: Date.now(), dy: 0 };
+    sheetDrag = { id: e.pointerId, y0: e.clientY, t0: Date.now(), dy: 0, lv: memoLevel, hs: null, h0: 0 };
     try { memoTop.setPointerCapture(e.pointerId); } catch (_) {}
     memoScreen.classList.add('dragging');
+    sheetDrag.hs = measureLevels();
+    sheetDrag.h0 = sheetDrag.hs[sheetDrag.lv];
   });
   memoTop.addEventListener('pointermove', function (e) {
-    if (!sheetDrag || e.pointerId !== sheetDrag.id) return;
-    sheetDrag.dy = Math.max(0, e.clientY - sheetDrag.y0);
-    memoScreen.style.transform = 'translateY(' + sheetDrag.dy + 'px)';
+    var d = sheetDrag;
+    if (!d || e.pointerId !== d.id) return;
+    d.dy = e.clientY - d.y0;
+    var lo = d.lv > 1 ? d.hs[d.lv - 1] : d.hs[1];     // 一段下の高さ(通常サイズでは自分自身)
+    var hi = d.lv < MEMO_LEVELS ? d.hs[d.lv + 1] : d.hs[MEMO_LEVELS];   // 一段上の高さ
+    var h = d.h0 - d.dy;
+    if (h > hi) h = hi;
+    if (d.lv > 1 && h < lo) h = lo;
+    if (h >= lo) {
+      memoScreen.style.transform = '';
+      memoScreen.style.height = h + 'px';
+    } else {   // 通常サイズから下へ引いている間は、従来どおりシートごと下へ動かす(離すと閉じる/戻る)
+      memoScreen.style.height = '';
+      memoScreen.style.transform = 'translateY(' + (lo - h) + 'px)';
+    }
   });
   function endSheetDrag(e) {
-    if (!sheetDrag || e.pointerId !== sheetDrag.id) return;
-    var d = sheetDrag; sheetDrag = null;
+    var d = sheetDrag;
+    if (!d || e.pointerId !== d.id) return;
+    sheetDrag = null;
     memoScreen.classList.remove('dragging');
-    var fast = d.dy > 30 && d.dy / Math.max(1, Date.now() - d.t0) > 0.5;
-    if (e.type !== 'pointercancel' && (d.dy >= 80 || fast)) {
-      memoScreen.style.transform = 'translateY(100%)';   // 指を離した位置から下へ滑り落ちる
+    var cancelled = e.type === 'pointercancel';
+    var dy = d.dy, ady = Math.abs(dy);
+    var fast = ady > 30 && ady / Math.max(1, Date.now() - d.t0) > 0.5;
+    if (!cancelled && d.lv === 1 && dy > 0 && (dy >= 80 || fast)) {
+      memoScreen.style.transform = 'translateY(100%)';   // 指を離した位置から下へ滑り落ちる(通常サイズからさらに下へ → 閉じる)
       setMemoSheet(false, true);
-    } else {
-      memoScreen.style.transform = '';                   // 元の位置へ戻る
+      return;
     }
+    var target = d.lv;
+    if (!cancelled && dy < 0 && d.lv < MEMO_LEVELS) {
+      var thUp = Math.min(40, 0.35 * (d.hs[d.lv + 1] - d.hs[d.lv]));
+      if (ady >= thUp || fast) target = d.lv + 1;
+    } else if (!cancelled && dy > 0 && d.lv > 1) {
+      var thDn = Math.min(40, 0.35 * (d.hs[d.lv] - d.hs[d.lv - 1]));
+      if (ady >= thDn || fast) target = d.lv - 1;
+    }
+    memoScreen.style.transform = '';   // (通常サイズで下へ引いて閉じなかったときは元の位置へ戻る)
+    void memoScreen.offsetHeight;      // 現在のpx高さを確定してから段階を切り替える(高さがなめらかに動く)
+    setMemoLevel(target);
   }
   memoTop.addEventListener('pointerup', endSheetDrag);
   memoTop.addEventListener('pointercancel', endSheetDrag);
@@ -871,6 +1343,8 @@
     memoTargetEl.textContent = '作成中:' + targetLabel(cur);
 
     var all = memos.filter(function (m) { return m.target === memoViewKey; });
+    memoDelAllBtn.disabled = !all.length || memoViewKey === 'sample';
+    memoDelAllBtn.textContent = 'この回を全部削除' + (all.length ? '(' + all.length + '口)' : '');
     var cnt = { all: all.length, buy: 0, maybe: 0 };
     all.forEach(function (m) { if (m.mark) cnt[m.mark]++; });
     Array.prototype.forEach.call(document.querySelectorAll('#memo-filter button'), function (b) {
@@ -975,6 +1449,30 @@
     });
   }
 
+  // ---- 開いている回のメモを一括削除 ----
+  var memoDelAllBtn = document.getElementById('memo-del-all');
+  function deleteAllInView() {
+    if (memoBusy || !memoReady) return;
+    var key = memoViewKey;
+    if (!key || key === 'sample') return;   // サンプルは対象外(読み込み成功時の自動削除、または1口ずつ削除)
+    var n0 = memos.filter(function (m) { return m.lottery === LOTTERY && m.target === key; }).length;
+    if (!n0) return;
+    askConfirm(targetLabel(key) + 'の予想メモを削除しますか?', targetLabel(key) + 'の予想メモ' + n0 + '口を削除します。取り消せません。', '削除する', 'danger').then(function (ok) {
+      if (!ok || memoBusy || !memoReady) return;
+      var ids = memos.filter(function (m) { return m.lottery === LOTTERY && m.target === key; }).map(function (m) { return m.id; });
+      if (!ids.length) return;
+      function removed() {
+        var gone = {}; ids.forEach(function (id) { gone[id] = true; });
+        memos = memos.filter(function (m) { return !gone[m.id]; });
+        memoBusy = false; renderMemo(); toast(targetLabel(key) + 'の予想メモ' + ids.length + '口を削除しました');
+      }
+      memoBusy = true;
+      if (memoMemoryOnly) { removed(); return; }
+      dbDeleteMemosOfTarget(key, ids).then(removed, function () { memoBusy = false; memoSaveFailed('削除'); });
+    });
+  }
+  memoDelAllBtn.addEventListener('click', deleteAllInView);
+
   // ---- 出目表で開く:選択数字を、この予想の数字に置き換える ----
   function recallMemo(rec) {
     if (!ready || busy) { toast('準備中です。少し待ってからもう一度押してください。', true); return; }
@@ -1043,6 +1541,7 @@
   function startUp(saved) {
     if (saved && saved.draws.length) {
       draws = saved.draws;
+      dataMeta = saved.meta || null;
       showDraws(saved.meta);
     } else {
       refreshHistory();   // 保存データなし → 仮データ(従来どおり「サンプル」表示。件数は表示回数に従う)
@@ -1058,6 +1557,7 @@
     render();
     toBottom();
     ready = true;
+    renderDataInfo();
     renderMemo();   // v4.0: 対象回(最新回+1)が決まったので予想メモ画面を更新
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (_) {}   // 可能ならブラウザに保存の維持を依頼(失敗しても動作に影響なし)
   }

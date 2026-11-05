@@ -44,6 +44,8 @@
       </div>
     </div>
     <button id="csv-btn" class="sp-item" type="button">ロト7 CSV読み込み・更新</button>
+    <button id="builtin-btn" class="sp-item sp-item-2" type="button"><span class="sp-item-main">内蔵データを読み込む</span><span class="sp-item-sub">アプリ内蔵の抽選データで置き換え(確認あり)</span></button>
+    <div id="data-info" class="sp-info" aria-label="現在の抽選データ"><div class="sp-info-row"><span class="sp-info-k">抽選データ</span><span class="sp-info-v">確認中…</span></div></div>
     <button id="color-btn" class="sp-item" type="button" aria-expanded="false" aria-controls="color-panel">色設定</button>
   </div>
   <!-- 色設定パネル(操作バーの下に重ねて表示。レイアウトには影響しない) -->
@@ -114,6 +116,7 @@
     <div id="memo-head">
       <label id="memo-round-label">対象回<select id="memo-round" aria-label="表示する抽選回"></select></label>
       <span id="memo-target"></span>
+      <button id="memo-del-all" type="button" disabled>この回を全部削除</button>
       <div id="memo-filter" role="group" aria-label="絞り込み">
         <button type="button" data-filter="all" aria-pressed="true">すべて<span class="mf-n"></span></button>
         <button type="button" data-filter="buy" aria-pressed="false">★ 買う<span class="mf-n"></span></button>
